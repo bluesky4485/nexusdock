@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import { CheckCircle2, Circle, Clock3, FileText, Layers, LoaderCircle, Search, ShieldAlert, Trash2 } from 'lucide-react';
+import { Check, Clock3, FileText, Layers, Search, ShieldAlert, Trash2 } from 'lucide-react';
 import { ApiError, api } from '../../api/client';
 import { formatTime } from '../../lib/time';
 import Dialog from '../Dialog';
@@ -258,15 +258,19 @@ export function SkillsPage({ nodeID, refreshToken }: { nodeID: string; refreshTo
   const { t } = useTranslation();
   const runtimeBase = `/v1/runtime/nodes/${encodeURIComponent(nodeID)}`;
   const resource = useOpsResource<SkillsResponse>(`${runtimeBase}/skills`, { ok: false, items: [], count: 0, root: '' }, refreshToken, t('Request failed'));
+  const deepLinkTarget = pluginSkillTargetFromHash();
   const [query, setQuery] = useState('');
   const [selectedKey, setSelectedKey] = useState('');
-  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(() => Boolean(pluginSkillTargetFromHash()));
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return resource.data.items;
-    return resource.data.items.filter((item) => [item.id, item.title, item.description, item.skill_ref, item.source_type, item.source_id].filter(Boolean).join(' ').toLowerCase().includes(needle));
+    return resource.data.items.filter((item) => [item.id, item.title, item.description, item.skill_ref, item.source_type, item.source_id, item.plugin_name].filter(Boolean).join(' ').toLowerCase().includes(needle));
   }, [query, resource.data.items]);
-  const selected = filtered.find((item) => skillSelectionKey(item) === selectedKey) || filtered[0];
+  const deepLinkedSkill = deepLinkTarget
+    ? filtered.find((item) => item.source_type === 'plugin' && item.plugin_name === deepLinkTarget.pluginName && (item.id === deepLinkTarget.skillName || item.title === deepLinkTarget.skillName))
+    : undefined;
+  const selected = filtered.find((item) => skillSelectionKey(item) === selectedKey) || deepLinkedSkill || filtered[0];
   const detailURL = selected ? withSkillRef(`${runtimeBase}/skills/${encodeURIComponent(selected.source)}/${encodeURIComponent(selected.id)}`, selected.skill_ref) : '';
   const detail = useOptionalOpsResource<SkillDetailResponse>(detailURL, { ok: false, skill: selected as OpsSkillDetail }, refreshToken, t('Request failed'));
   return <OpsShell error={resource.error}>
@@ -277,11 +281,11 @@ export function SkillsPage({ nodeID, refreshToken }: { nodeID: string; refreshTo
           <label className="ops-search"><Search size={15} /><input aria-label={t('Search Skill')} value={query} onChange={(event) => { setQuery(event.target.value); setMobileDetailOpen(false); }} placeholder={t('Search name or description')} /></label>
         </header>
         <div className="skills-rail">
-          {filtered.length === 0 ? <EmptyOps text={t('No matching skills.')} /> : filtered.map((skill) => <button type="button" key={skillSelectionKey(skill)} className={`skill-list-item ${selected && skillSelectionKey(selected) === skillSelectionKey(skill) ? 'is-selected' : ''}`} aria-pressed={Boolean(selected && skillSelectionKey(selected) === skillSelectionKey(skill))} onClick={() => { setSelectedKey(skillSelectionKey(skill)); setMobileDetailOpen(true); }}><span className="ops-card-icon"><Layers size={16} /></span><span><strong>{skill.title || skill.id}</strong><small>{skillSourceLabel(skill.source_type, t)} · {skill.file_count > 0 ? t('{{count}} files', { count: skill.file_count }) : t('Files loaded on demand')}</small></span></button>)}
+          {filtered.length === 0 ? <EmptyOps text={t('No matching skills.')} /> : filtered.map((skill) => <button type="button" key={skillSelectionKey(skill)} className={`skill-list-item ${selected && skillSelectionKey(selected) === skillSelectionKey(skill) ? 'is-selected' : ''}`} aria-pressed={Boolean(selected && skillSelectionKey(selected) === skillSelectionKey(skill))} onClick={() => { setSelectedKey(skillSelectionKey(skill)); setMobileDetailOpen(true); }}><span className="ops-card-icon"><Layers size={16} /></span><span><strong>{skill.title || skill.id}</strong><small>{skillSourceDisplayLabel(skill, t)} · {skill.file_count > 0 ? t('{{count}} files', { count: skill.file_count }) : t('Files loaded on demand')}</small></span></button>)}
         </div>
       </aside>
       <div className="skills-detail mobile-drilldown-detail">
-        {selected && <MobileDrilldownBar label="Skill" title={selected.title || selected.id} meta={skillSourceLabel(selected.source_type, t)} backLabel={t('Back to skill list')} onBack={() => setMobileDetailOpen(false)} />}
+        {selected && <MobileDrilldownBar label="Skill" title={selected.title || selected.id} meta={skillSourceDisplayLabel(selected, t)} backLabel={t('Back to skill list')} onBack={() => setMobileDetailOpen(false)} />}
         <SkillDetail nodeID={nodeID} skill={selected} detail={detail.data.skill} loading={detail.loading} error={detail.error} refreshToken={refreshToken} />
       </div>
     </section>
@@ -299,15 +303,21 @@ function TaskDetail({ task, detail, loading, error, deleting, onDelete }: { task
     <header>
       <div><span>{t('Task')}</span><h3>{taskDisplayTitle(full, t('Untitled task'))}</h3>{full.goal && <p>{full.goal}</p>}</div>
       <div className="ops-task-detail-actions">
-        <StatusBadge tone={toneForTask(full)}>{taskStatusLabel(full.status, t)}</StatusBadge>
-        <button type="button" className="nx-button is-danger is-small" aria-label={t('Delete task {{title}}', { title: taskDisplayTitle(full, t('Untitled task')) })} onClick={() => onDelete(full)} disabled={deleting}><Trash2 size={15} />{deleting ? t('Deleting…') : t('Delete')}</button>
+        <button
+          type="button"
+          className="nx-icon-button ops-task-delete-icon"
+          title={t('Delete task')}
+          aria-label={t('Delete task {{title}}', { title: taskDisplayTitle(full, t('Untitled task')) })}
+          aria-busy={deleting}
+          onClick={() => onDelete(full)}
+          disabled={deleting}
+        ><Trash2 size={16} /></button>
       </div>
     </header>
     {loading && <div className="nx-alert is-info">{t('Loading task details…')}</div>}
     {error && <div className="nx-alert is-error">{error}</div>}
     {full.blocker && <div className="ops-blocker"><ShieldAlert size={15} />{full.blocker}</div>}
-    <TaskProgress task={full} />
-    <section className="ops-current-step" aria-label={t('Current progress')}>
+    <section className="ops-current-step-text" aria-label={t('Current progress')}>
       <span>{full.status === 'completed' ? t('Result') : full.status === 'blocked' ? t('Current status') : t('Current step')}</span>
       <strong>{currentTitle}</strong>
       {full.summary && full.summary !== currentTitle && <p>{full.summary}</p>}
@@ -380,6 +390,16 @@ function SkillDetailContent({ nodeID, skill, detail, loading, error, refreshToke
   </article>;
 }
 
+function pluginSkillTargetFromHash(): { pluginName: string; skillName: string } | null {
+  const [section, source, pluginName, skillName] = window.location.hash.replace(/^#\/?/, '').split('/');
+  if (section !== 'skills' || source !== 'plugin' || !pluginName || !skillName) return null;
+  try {
+    return { pluginName: decodeURIComponent(pluginName), skillName: decodeURIComponent(skillName) };
+  } catch {
+    return null;
+  }
+}
+
 function skillSelectionKey(skill: OpsSkill): string {
   return skill.skill_ref || `${skill.source}:${skill.id}`;
 }
@@ -436,9 +456,10 @@ function TaskStepList({ steps, status }: { steps: TaskStep[]; status: string }) 
     {steps.length === 0 ? <p className="ops-no-steps">{t('This task has no segmented steps; only task status can be displayed.')}</p> : <div className="ops-task-step-list">{steps.map((step) => {
       const stepStatus = status === 'completed' ? 'completed' : step.status;
       return <div className={`ops-task-step is-${stepStatus}`} key={step.id}>
-        <span className="ops-task-step-icon">{stepStatus === 'completed' ? <CheckCircle2 size={17} /> : stepStatus === 'in_progress' ? <LoaderCircle size={17} /> : <Circle size={17} />}</span>
+        <span className={`ops-task-step-marker is-${stepStatus}`} role="img" aria-label={taskStepStatusLabel(stepStatus, t)}>
+          {stepStatus === 'completed' ? <Check size={13} strokeWidth={3} /> : stepStatus === 'in_progress' ? <span /> : null}
+        </span>
         <strong>{step.title}</strong>
-        <small>{taskStepStatusLabel(stepStatus, t)}</small>
       </div>;
     })}</div>}
   </section>;
@@ -454,11 +475,15 @@ function pickText(record: Record<string, unknown>, keys: string[]): string {
   return '';
 }
 function skillSourceLabel(sourceType: string | undefined, t: TFunction): string {
-  if (sourceType === 'managed') return t('Managed');
+  if (sourceType === 'managed') return t('AgentDock Skills');
   if (sourceType === 'shared') return t('Shared');
   if (sourceType === 'workspace') return t('Workspace');
   if (sourceType === 'plugin') return t('Plugin');
   return sourceType || t('Unknown');
+}
+function skillSourceDisplayLabel(skill: Pick<OpsSkill, 'source_type' | 'plugin_name'>, t: TFunction): string {
+  if (skill.source_type === 'plugin' && skill.plugin_name) return skill.plugin_name;
+  return skillSourceLabel(skill.source_type, t);
 }
 function shortDigest(value: string | undefined): string {
   if (!value) return '—';

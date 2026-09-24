@@ -4,8 +4,8 @@ import { useTranslation } from 'react-i18next';
 import i18n from './i18n';
 import {
   Activity, BrainCircuit, Cable, ChevronRight,
-  CircleAlert, Database, FileJson, Home, ListChecks, Menu, RefreshCw,
-  ServerCog, Settings, ShieldCheck, UserRound, Wrench, X,
+  CircleAlert, CirclePlus, Database, FileJson, Home, ListChecks, Menu, RefreshCw,
+  Package, ServerCog, Settings, ShieldCheck, UserRound, Wrench, X,
 } from 'lucide-react';
 import RecallWorkspace from './RecallWorkspace';
 import { type WebSession } from './Auth';
@@ -17,6 +17,7 @@ import { ApiError, api, setCSRFToken } from './api/client';
 import WorkflowTemplatesPage from './components/workflows/WorkflowTemplatesPage';
 import { SkillsPage, TaskCenterPage } from './components/runtime/RuntimePages';
 import MCPPage from './components/runtime/MCPPage';
+import PluginPage from './components/runtime/PluginPage';
 import {
   AgentDockNodeRequired,
   AgentDockNodeSelector,
@@ -25,7 +26,7 @@ import {
 } from './components/runtime/AgentDockNodes';
 import './nexus.css';
 
-type RuntimeSection = 'tasks' | 'skills' | 'mcp';
+type RuntimeSection = 'tasks' | 'skills' | 'plugins' | 'mcp';
 type Section = 'home' | 'recall' | 'templates' | RuntimeSection | 'settings';
 type SettingsSection = 'account' | 'mcp' | 'ai' | 'system';
 type Tone = 'ok' | 'warn' | 'danger' | 'info' | 'muted';
@@ -69,6 +70,7 @@ type NavGroup = { label: string; items: SectionMeta[] };
 
 const RUNTIME_SECTIONS: RuntimeSectionMeta[] = [
   { id: 'tasks', label: 'Tasks', icon: ListChecks },
+  { id: 'plugins', label: 'Plugin', icon: Package },
   { id: 'skills', label: 'Skill', icon: Wrench },
   { id: 'mcp', label: 'MCP', icon: Cable },
 ];
@@ -383,15 +385,23 @@ function RuntimeContent({ active, refreshToken, runtimeNodes }: {
   runtimeNodes: RuntimeNodesState;
 }) {
   const { t } = useTranslation();
+  const [mcpAddOpen, setMCPAddOpen] = useState(false);
+
+  useEffect(() => {
+    setMCPAddOpen(false);
+  }, [active, runtimeNodes.selectedNodeID]);
+
   return <section className={`runtime-standalone-page runtime-${active}-page`}>
     <div className="runtime-node-bar">
       <AgentDockNodeSelector nodes={runtimeNodes.nodes} selectedNodeID={runtimeNodes.selectedNodeID} onSelect={runtimeNodes.selectNode} />
       {runtimeNodes.selectedNode && <span className={`runtime-node-status ${runtimeNodes.selectedNode.online ? 'is-online' : 'is-offline'}`}>{runtimeNodes.selectedNode.online ? t('Online') : t('Offline')}{runtimeNodes.selectedNode.os ? ` · ${runtimeNodes.selectedNode.os}/${runtimeNodes.selectedNode.arch}` : ''}</span>}
+      {active === 'mcp' && runtimeNodes.selectedNode && <button type="button" className="nx-button runtime-node-action" onClick={() => setMCPAddOpen(true)}><CirclePlus size={16} />{t('Add MCP')}</button>}
     </div>
     {!runtimeNodes.selectedNode && <AgentDockNodeRequired><button type="button" className="nx-button" onClick={() => { window.location.hash = 'settings/system'; }}>{t('Manage nodes')}</button></AgentDockNodeRequired>}
     {active === 'tasks' && runtimeNodes.selectedNode && <TaskCenterPage key={runtimeNodes.selectedNode.id} nodeID={runtimeNodes.selectedNode.id} refreshToken={refreshToken} />}
     {active === 'skills' && runtimeNodes.selectedNode && <SkillsPage key={runtimeNodes.selectedNode.id} nodeID={runtimeNodes.selectedNode.id} refreshToken={refreshToken} />}
-    {active === 'mcp' && runtimeNodes.selectedNode && <MCPPage key={runtimeNodes.selectedNode.id} nodeID={runtimeNodes.selectedNode.id} refreshToken={refreshToken} />}
+    {active === 'plugins' && runtimeNodes.selectedNode && <PluginPage key={runtimeNodes.selectedNode.id} nodeID={runtimeNodes.selectedNode.id} refreshToken={refreshToken} />}
+    {active === 'mcp' && runtimeNodes.selectedNode && <MCPPage key={runtimeNodes.selectedNode.id} nodeID={runtimeNodes.selectedNode.id} refreshToken={refreshToken} addOpen={mcpAddOpen} onAddOpenChange={setMCPAddOpen} />}
   </section>;
 }
 
