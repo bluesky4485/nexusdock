@@ -167,9 +167,17 @@ export function AgentDockNodesPanel({ nodes, selectedNodeID, loading, error, onR
     ? `agentdock nexus pair --endpoint ${window.location.origin} --code ${pairing.code}`
     : '';
 
+  const orderedNodes = [
+    ...nodes.filter((node) => node.enabled),
+    ...nodes.filter((node) => !node.enabled),
+  ];
+
   return <section className="agentdock-nodes-panel">
-    <header>
-      <div><span className="nexus-eyebrow">RUNTIME NODES</span><h2>{t('AgentDock nodes')}</h2><p>{t('AgentDock actively connects to Nexus; no public device address needed, and no need to provide AgentDock token to Nexus.')}</p></div>
+    <header className="agentdock-nodes-head">
+      <div className="agentdock-nodes-title">
+        <span className="nexus-panel-icon"><Server size={17} /></span>
+        <div><h3>{t('AgentDock nodes')}</h3></div>
+      </div>
       <div className="agentdock-node-actions">
         <button type="button" className="nx-button" onClick={() => void createPairingCode()} disabled={busy === 'pair'}><CirclePlus size={15} />{busy === 'pair' ? t('Generating…') : t('Pair device')}</button>
       </div>
@@ -178,10 +186,10 @@ export function AgentDockNodesPanel({ nodes, selectedNodeID, loading, error, onR
     {(error || notice) && <div className={`nx-alert is-${error || notice?.tone === 'error' ? 'error' : notice?.tone || 'info'}`}>{error || notice?.text}</div>}
 
     <div className="agentdock-node-list">
-      {loading && nodes.length === 0 ? <p className="empty-mini">{t('Loading AgentDock nodes…')}</p> : nodes.length === 0 ? <p className="empty-mini">{t('No AgentDock nodes have been paired.')}</p> : nodes.map((node) => <article key={node.id} className={selectedNodeID === node.id ? 'is-selected' : ''}>
+      {loading && nodes.length === 0 ? <p className="empty-mini">{t('Loading AgentDock nodes…')}</p> : nodes.length === 0 ? <p className="empty-mini">{t('No AgentDock nodes have been paired.')}</p> : orderedNodes.map((node) => <article key={node.id} className={selectedNodeID === node.id ? 'is-selected' : ''}>
         <span className="agentdock-node-icon"><Server size={18} /></span>
         <div className="agentdock-node-copy">
-          <div><strong>{node.name}</strong><code>{node.id}</code>{!node.enabled && <em>{t('Disabled')}</em>}</div>
+          <div><strong>{node.name}</strong><code>{node.id}</code>{!node.enabled && <em>{t('Node disabled')}</em>}</div>
           <small>{node.os && node.arch ? `${node.os}/${node.arch}` : t('Waiting for first connection')}{node.version ? ` · AgentDock ${node.version}` : ''}</small>
           <span className={`agentdock-node-status ${node.online ? 'is-online' : 'is-offline'}`}><strong>{node.online ? t('Online') : t('Offline')}</strong><span>· {t('{{count}} node tools', { count: node.capabilities?.length || 0 })}{node.last_seen_at ? ` · ${t('Recent {{time}}', { time: new Date(node.last_seen_at).toLocaleString() })}` : ''}</span></span>
         </div>
